@@ -50,11 +50,7 @@ def predict_news(text):
     else:
         label = "🔴 FAKE NEWS"
 
-    return f"""
-{label}
-
-Confidence Score: {confidence:.2f}%
-"""
+    return f"{label}\n\nConfidence Score: {confidence:.2f}%"
 
 
 with gr.Blocks(theme=gr.themes.Soft()) as demo:
@@ -62,30 +58,36 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
     gr.Markdown(
         """
         # 📰 AI Fake News Detector
-        
+
         Detect whether a news article is REAL or FAKE using a fine-tuned DistilBERT model.
         """
     )
 
-    with gr.Row():
+    news_input = gr.Textbox(
+        lines=12,
+        placeholder="Paste your news article here...",
+        label="News Article"
+    )
 
-        input_text = gr.Textbox(
-            lines=15,
-            placeholder="Paste news article here...",
-            label="News Article"
-        )
-
-        output_text = gr.Textbox(
-            label="Prediction",
-            lines=6
-        )
+    output = gr.Textbox(
+        label="Prediction"
+    )
 
     submit_btn = gr.Button("Analyze News")
 
     submit_btn.click(
         fn=predict_news,
-        inputs=input_text,
-        outputs=output_text
+        inputs=news_input,
+        outputs=output
+    )
+
+    gr.Examples(
+        examples=[
+            ["NASA announces new moon mission for 2027."],
+            ["Scientists confirm aliens built the pyramids."],
+            ["Government launches nationwide AI education program."]
+        ],
+        inputs=news_input
     )
 
 demo.launch()
