@@ -1,23 +1,15 @@
 import gradio as gr
 import torch
-
-from transformers import (
-    AutoTokenizer,
-    AutoModelForSequenceClassification
-)
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 model_path = "model"
 
 tokenizer = AutoTokenizer.from_pretrained(model_path)
-
 model = AutoModelForSequenceClassification.from_pretrained(model_path)
-
 model.eval()
 
-
 def predict_news(text):
-
-    if len(text.strip()) == 0:
+    if not text.strip():
         return "Please enter some news text."
 
     inputs = tokenizer(
@@ -29,18 +21,9 @@ def predict_news(text):
     )
 
     with torch.no_grad():
-
         outputs = model(**inputs)
-
-        probabilities = torch.nn.functional.softmax(
-            outputs.logits,
-            dim=-1
-        )
-
-        confidence, prediction = torch.max(
-            probabilities,
-            dim=1
-        )
+        probs = torch.nn.functional.softmax(outputs.logits, dim=-1)
+        confidence, prediction = torch.max(probs, dim=1)
 
     prediction = prediction.item()
     confidence = confidence.item() * 100
@@ -52,16 +35,41 @@ def predict_news(text):
 
     return f"{label}\n\nConfidence Score: {confidence:.2f}%"
 
+css = """
+body, .gradio-container {
+    background: #0f172a !important;
+    color: #f8fafc !important;
+}
 
-with gr.Blocks(theme=gr.themes.Soft()) as demo:
+.gradio-container {
+    max-width: 1100px !important;
+    margin: 0 auto !important;
+}
 
-    gr.Markdown(
-        """
-        # 📰 AI Fake News Detector
+h1, h2, h3, p, label, .markdown, .prose {
+    color: #f8fafc !important;
+}
 
-        Detect whether a news article is REAL or FAKE using a fine-tuned DistilBERT model.
-        """
-    )
+textarea, input {
+    background: #1e293b !important;
+    color: #f8fafc !important;
+    border: 1px solid #334155 !important;
+}
+
+button {
+    background: #2563eb !important;
+    color: white !important;
+    border: none !important;
+}
+
+footer {
+    display: none !important;
+}
+"""
+
+with gr.Blocks(css=css, theme=gr.themes.Soft()) as demo:
+    gr.Markdown("# 📰 AI Fake News Detector")
+    gr.Markdown("Detect whether a news article is REAL or FAKE using a fine-tuned DistilBERT model.")
 
     news_input = gr.Textbox(
         lines=12,
@@ -69,17 +77,10 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
         label="News Article"
     )
 
-    output = gr.Textbox(
-        label="Prediction"
-    )
+    output = gr.Textbox(label="Prediction")
 
     submit_btn = gr.Button("Analyze News")
-
-    submit_btn.click(
-        fn=predict_news,
-        inputs=news_input,
-        outputs=output
-    )
+    submit_btn.click(predict_news, news_input, output)
 
     gr.Examples(
         examples=[
