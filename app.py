@@ -1,64 +1,69 @@
 import gradio as gr
-from transformers import pipeline
+import torch
 
-classifier = pipeline(
-    "text-classification",
-    model="hamzab/roberta-fake-news-classification"
+from transformers import (
+    DistilBertTokenizer,
+    DistilBertForSequenceClassification
 )
+
+model_path = "model"
+
+tokenizer = DistilBertTokenizer.from_pretrained(model_path)
+
+model = DistilBertForSequenceClassification.from_pretrained(model_path)
+
+model.eval()
+
 
 def predict_news(text):
 
-    if not text.strip():
+    if len(text.strip()) == 0:
         return "Please enter some news text."
 
-    result = classifier(text)[0]
+    inputs = tokenizer(
+        text,
+        return_tensors="pt",
+        truncation=True,
+        padding=True,
+        max_length=512
+    )
 
-    label = result["label"]
-    confidence = result["score"] * 100
+    with torch.no_grad():
 
-    if label == "LABEL_1":
-        prediction = "🟢 REAL NEWS"
+        outputs = model(**inputs)
+
+        probabilities = torch.nn.functional.softmax(
+            outputs.logits,
+            dim=-1
+        )
+
+        confidence, prediction = torch.max(
+            probabilities,
+            dim=1
+        )
+
+    prediction = prediction.item()
+    confidence = confidence.item() * 100
+
+    if prediction == 1:
+        label = "🟢 REAL NEWS"
     else:
-        prediction = "🔴 FAKE NEWS"
+        label = "🔴 FAKE NEWS"
 
     return f"""
-{prediction}
+{label}
 
 Confidence Score: {confidence:.2f}%
 """
 
 
-custom_css = """
-body {
-    background-color: #0f172a;
-}
-
-.gradio-container {
-    max-width: 1000px !important;
-    margin: auto;
-}
-
-h1 {
-    text-align: center;
-    color: white;
-}
-
-footer {
-    visibility: hidden;
-}
-"""
-
-
-with gr.Blocks(
-    theme=gr.themes.Soft(),
-    css=custom_css
-) as demo:
+with gr.Blocks(theme=gr.themes.Soft()) as demo:
 
     gr.Markdown(
         """
         # 📰 AI Fake News Detector
         
-        Detect whether a news article is REAL or FAKE using Hugging Face Transformers.
+        Detect whether a news article is REAL or FAKE using a fine-tuned DistilBERT model.
         """
     )
 
@@ -81,15 +86,6 @@ with gr.Blocks(
         fn=predict_news,
         inputs=input_text,
         outputs=output_text
-    )
-
-    gr.Examples(
-        examples=[
-            ["NASA announces new moon mission for 2027."],
-            ["Scientists confirm aliens built the pyramids."],
-            ["Government launches nationwide AI education program."]
-        ],
-        inputs=input_text
     )
 
 demo.launch()
