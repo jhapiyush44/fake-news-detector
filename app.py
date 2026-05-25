@@ -2,15 +2,15 @@ import gradio as gr
 import torch
 
 from transformers import (
-    DistilBertTokenizer,
-    DistilBertForSequenceClassification
+    AutoTokenizer,
+    AutoModelForSequenceClassification
 )
 
 model_path = "model"
 
-tokenizer = DistilBertTokenizer.from_pretrained(model_path)
+tokenizer = AutoTokenizer.from_pretrained(model_path)
 
-model = DistilBertForSequenceClassification.from_pretrained(model_path)
+model = AutoModelForSequenceClassification.from_pretrained(model_path)
 
 model.eval()
 
