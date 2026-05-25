@@ -8,7 +8,7 @@ sdk_version: 5.0.0
 app_file: app.py
 pinned: false
 license: mit
-short_description: Fake News Detection using Hugging Face Transformers and Gradio
+short_description: AI-powered fake news detection app
 ---
 
 # 📰 AI Fake News Detector
