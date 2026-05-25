@@ -8,13 +8,13 @@ classifier = pipeline(
 
 def predict_news(text):
 
-    if len(text.strip()) == 0:
-        return "Please enter some text."
+    if not text.strip():
+        return "Please enter some news text."
 
     result = classifier(text)[0]
 
     label = result["label"]
-    score = result["score"] * 100
+    confidence = result["score"] * 100
 
     if label == "LABEL_1":
         prediction = "🟢 REAL NEWS"
@@ -24,24 +24,72 @@ def predict_news(text):
     return f"""
 {prediction}
 
-Confidence Score: {score:.2f}%
+Confidence Score: {confidence:.2f}%
 """
 
-demo = gr.Interface(
-    fn=predict_news,
 
-    inputs=gr.Textbox(
-        lines=12,
-        placeholder="Paste news article here..."
-    ),
+custom_css = """
+body {
+    background-color: #0f172a;
+}
 
-    outputs=gr.Textbox(label="Prediction"),
+.gradio-container {
+    max-width: 1000px !important;
+    margin: auto;
+}
 
-    title="📰 AI Fake News Detector",
+h1 {
+    text-align: center;
+    color: white;
+}
 
-    description="Fake News Detection using Hugging Face Transformers",
+footer {
+    visibility: hidden;
+}
+"""
 
-    theme="soft"
-)
+
+with gr.Blocks(
+    theme=gr.themes.Soft(),
+    css=custom_css
+) as demo:
+
+    gr.Markdown(
+        """
+        # 📰 AI Fake News Detector
+        
+        Detect whether a news article is REAL or FAKE using Hugging Face Transformers.
+        """
+    )
+
+    with gr.Row():
+
+        input_text = gr.Textbox(
+            lines=15,
+            placeholder="Paste news article here...",
+            label="News Article"
+        )
+
+        output_text = gr.Textbox(
+            label="Prediction",
+            lines=6
+        )
+
+    submit_btn = gr.Button("Analyze News")
+
+    submit_btn.click(
+        fn=predict_news,
+        inputs=input_text,
+        outputs=output_text
+    )
+
+    gr.Examples(
+        examples=[
+            ["NASA announces new moon mission for 2027."],
+            ["Scientists confirm aliens built the pyramids."],
+            ["Government launches nationwide AI education program."]
+        ],
+        inputs=input_text
+    )
 
 demo.launch()
