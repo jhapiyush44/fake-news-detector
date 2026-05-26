@@ -1,145 +1,245 @@
 import pandas as pd
+import torch
+
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, f1_score
+
 from datasets import Dataset
+
 from transformers import (
-    DistilBertTokenizer,
-    DistilBertForSequenceClassification,
+    AutoTokenizer,
+    AutoModelForSequenceClassification,
     TrainingArguments,
     Trainer
 )
 
-from sklearn.model_selection import train_test_split
-import torch
-import numpy as np
-from sklearn.metrics import accuracy_score
-
-
-# =========================
-# LOAD DATA
-# =========================
+# -----------------------------------
+# Load Dataset
+# -----------------------------------
 
 fake_df = pd.read_csv("dataset/Fake.csv")
 true_df = pd.read_csv("dataset/True.csv")
 
-fake_df["label"] = 0
-true_df["label"] = 1
+# -----------------------------------
+# Create Better Input Text
+# -----------------------------------
 
-df = pd.concat([fake_df, true_df])
+fake_df["content"] = fake_df["text"]
+true_df["content"] = true_df["text"]
 
-df = df[["text", "label"]]
+fake_df = fake_df[["content"]]
+true_df = true_df[["content"]]
 
-# Optional: reduce dataset size for faster training
-df = df.sample(5000, random_state=42)
+# -----------------------------------
+# Labels
+# 1 = Fake
+# 0 = Real
+# -----------------------------------
 
-train_texts, test_texts, train_labels, test_labels = train_test_split(
-    df["text"],
-    df["label"],
-    test_size=0.2,
+fake_df["label"] = 1
+true_df["label"] = 0
+
+# -----------------------------------
+# Balanced Dataset
+# -----------------------------------
+
+fake_df = fake_df.sample(
+    4000,
     random_state=42
 )
 
-
-# =========================
-# TOKENIZER
-# =========================
-
-tokenizer = DistilBertTokenizer.from_pretrained(
-    "distilbert-base-uncased"
+true_df = true_df.sample(
+    4000,
+    random_state=42
 )
 
-train_encodings = tokenizer(
-    list(train_texts),
-    truncation=True,
-    padding=True
+# -----------------------------------
+# Combine + Shuffle
+# -----------------------------------
+
+df = pd.concat([fake_df, true_df])
+
+df = df.sample(
+    frac=1,
+    random_state=42
+).reset_index(drop=True)
+
+# -----------------------------------
+# Train / Validation Split
+# -----------------------------------
+
+train_texts, val_texts, train_labels, val_labels = train_test_split(
+    df["content"],
+    df["label"],
+    test_size=0.2,
+    random_state=42,
+    stratify=df["label"]
 )
 
-test_encodings = tokenizer(
-    list(test_texts),
-    truncation=True,
-    padding=True
+# -----------------------------------
+# Model Name
+# -----------------------------------
+
+model_name = "roberta-base"
+
+# -----------------------------------
+# Load Tokenizer
+# -----------------------------------
+
+tokenizer = AutoTokenizer.from_pretrained(
+    model_name
 )
 
+# -----------------------------------
+# Tokenization Function
+# -----------------------------------
 
-# =========================
-# DATASET FORMAT
-# =========================
+def tokenize(batch):
+
+    return tokenizer(
+        batch["text"],
+        truncation=True,
+        padding="max_length",
+        max_length=384
+    )
+
+# -----------------------------------
+# Create HuggingFace Datasets
+# -----------------------------------
 
 train_dataset = Dataset.from_dict({
-    "input_ids": train_encodings["input_ids"],
-    "attention_mask": train_encodings["attention_mask"],
-    "label": list(train_labels)
+    "text": train_texts.tolist(),
+    "label": train_labels.tolist()
 })
 
-test_dataset = Dataset.from_dict({
-    "input_ids": test_encodings["input_ids"],
-    "attention_mask": test_encodings["attention_mask"],
-    "label": list(test_labels)
+val_dataset = Dataset.from_dict({
+    "text": val_texts.tolist(),
+    "label": val_labels.tolist()
 })
 
+train_dataset = train_dataset.map(
+    tokenize,
+    batched=True
+)
 
-# =========================
-# MODEL
-# =========================
+val_dataset = val_dataset.map(
+    tokenize,
+    batched=True
+)
 
-model = DistilBertForSequenceClassification.from_pretrained(
-    "distilbert-base-uncased",
+# -----------------------------------
+# Remove Text Column
+# -----------------------------------
+
+train_dataset = train_dataset.remove_columns(
+    ["text"]
+)
+
+val_dataset = val_dataset.remove_columns(
+    ["text"]
+)
+
+# -----------------------------------
+# Set Torch Format
+# -----------------------------------
+
+train_dataset.set_format("torch")
+val_dataset.set_format("torch")
+
+# -----------------------------------
+# Load Model
+# -----------------------------------
+
+model = AutoModelForSequenceClassification.from_pretrained(
+    model_name,
     num_labels=2
 )
 
-
-# =========================
-# METRICS
-# =========================
+# -----------------------------------
+# Metrics
+# -----------------------------------
 
 def compute_metrics(eval_pred):
+
     logits, labels = eval_pred
-    predictions = np.argmax(logits, axis=-1)
+
+    predictions = torch.argmax(
+        torch.tensor(logits),
+        dim=1
+    )
+
+    accuracy = accuracy_score(
+        labels,
+        predictions
+    )
+
+    f1 = f1_score(
+        labels,
+        predictions
+    )
 
     return {
-        "accuracy": accuracy_score(labels, predictions)
+        "accuracy": accuracy,
+        "f1": f1
     }
 
-
-# =========================
-# TRAINING ARGUMENTS
-# =========================
+# -----------------------------------
+# Training Arguments
+# -----------------------------------
 
 training_args = TrainingArguments(
     output_dir="./results",
+
     eval_strategy="epoch",
     save_strategy="epoch",
-    num_train_epochs=1,
-    per_device_train_batch_size=8,
-    per_device_eval_batch_size=8,
-    logging_dir="./logs",
-    logging_steps=10
+
+    learning_rate=2e-5,
+
+    per_device_train_batch_size=4,
+    per_device_eval_batch_size=4,
+
+    gradient_accumulation_steps=2,
+
+    num_train_epochs=2,
+
+    weight_decay=0.01,
+
+    logging_steps=50,
+
+    load_best_model_at_end=True,
+
+    save_total_limit=1,
+
+    fp16=True
 )
 
-
-# =========================
-# TRAINER
-# =========================
+# -----------------------------------
+# Trainer
+# -----------------------------------
 
 trainer = Trainer(
     model=model,
+
     args=training_args,
+
     train_dataset=train_dataset,
-    eval_dataset=test_dataset,
+    eval_dataset=val_dataset,
+
     compute_metrics=compute_metrics
 )
 
-
-# =========================
-# TRAIN MODEL
-# =========================
+# -----------------------------------
+# Train Model
+# -----------------------------------
 
 trainer.train()
 
-
-# =========================
-# SAVE MODEL
-# =========================
+# -----------------------------------
+# Save Model + Tokenizer
+# -----------------------------------
 
 model.save_pretrained("model")
+
 tokenizer.save_pretrained("model")
 
-print("Model training complete!")
+print("\nModel training complete!")

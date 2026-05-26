@@ -1,7 +1,5 @@
 gradio==5.0.0
-transformers==4.38.2
-torch==2.2.2
-accelerate==0.28.0
-sentencepiece==0.2.0
-tokenizers==0.15.2
-numpy==1.26.4
+transformers
+torch
+accelerate
+numpy

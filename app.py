@@ -1,14 +1,31 @@
 import gradio as gr
 import torch
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+
+from transformers import (
+    AutoTokenizer,
+    AutoModelForSequenceClassification
+)
+
+# -----------------------------
+# Load Model + Tokenizer
+# -----------------------------
 
 model_path = "model"
 
 tokenizer = AutoTokenizer.from_pretrained(model_path)
-model = AutoModelForSequenceClassification.from_pretrained(model_path)
+
+model = AutoModelForSequenceClassification.from_pretrained(
+    model_path
+)
+
 model.eval()
 
+# -----------------------------
+# Prediction Function
+# -----------------------------
+
 def predict_news(text):
+
     if not text.strip():
         return "Please enter some news text."
 
@@ -21,21 +38,56 @@ def predict_news(text):
     )
 
     with torch.no_grad():
+
         outputs = model(**inputs)
-        probs = torch.nn.functional.softmax(outputs.logits, dim=-1)
-        confidence, prediction = torch.max(probs, dim=1)
 
-    prediction = prediction.item()
-    confidence = confidence.item() * 100
+        probabilities = torch.nn.functional.softmax(
+            outputs.logits,
+            dim=-1
+        )
 
-    if prediction == 1:
-        label = "🟢 REAL NEWS"
+    # Label Mapping
+    # 0 = Real
+    # 1 = Fake
+
+    real_score = probabilities[0][0].item()
+    fake_score = probabilities[0][1].item()
+
+    # Better Threshold Logic
+
+    if fake_score > 0.80:
+
+        label = "🔴 LIKELY FAKE NEWS"
+        confidence = fake_score * 100
+
+    elif real_score > 0.80:
+
+        label = "🟢 LIKELY REAL NEWS"
+        confidence = real_score * 100
+
     else:
-        label = "🔴 FAKE NEWS"
 
-    return f"{label}\n\nConfidence Score: {confidence:.2f}%"
+        label = "🟡 UNCERTAIN / MIXED SIGNALS"
+        confidence = max(real_score, fake_score) * 100
+
+    return f"""
+{label}
+
+Confidence Score: {confidence:.2f}%
+
+Fake Score: {fake_score:.2f}
+Real Score: {real_score:.2f}
+
+Note:
+This model predicts whether text resembles patterns commonly found in fake or real news articles.
+"""
+
+# -----------------------------
+# Custom UI Styling
+# -----------------------------
 
 css = """
+
 body, .gradio-container {
     background: #0f172a !important;
     color: #f8fafc !important;
@@ -65,30 +117,59 @@ button {
 footer {
     display: none !important;
 }
+
 """
 
-with gr.Blocks(css=css, theme=gr.themes.Soft()) as demo:
-    gr.Markdown("# 📰 AI Fake News Detector")
-    gr.Markdown("Detect whether a news article is REAL or FAKE using a fine-tuned DistilBERT model.")
+# -----------------------------
+# Gradio UI
+# -----------------------------
+
+with gr.Blocks(
+    css=css,
+    theme=gr.themes.Soft()
+) as demo:
+
+    gr.Markdown(
+        """
+# 📰 AI Fake News Detector
+
+This AI model analyzes whether a news article resembles patterns commonly found in fake or real news articles.
+"""
+    )
 
     news_input = gr.Textbox(
         lines=12,
-        placeholder="Paste your news article here...",
+        placeholder="Paste a news article here...",
         label="News Article"
     )
 
-    output = gr.Textbox(label="Prediction")
-
-    submit_btn = gr.Button("Analyze News")
-    submit_btn.click(predict_news, news_input, output)
-
-    gr.Examples(
-        examples=[
-            ["NASA announces new moon mission for 2027."],
-            ["Scientists confirm aliens built the pyramids."],
-            ["Government launches nationwide AI education program."]
-        ],
-        inputs=news_input
+    output = gr.Textbox(
+        label="Prediction"
     )
+
+    submit_btn = gr.Button(
+        "Analyze News"
+    )
+
+    submit_btn.click(
+        predict_news,
+        news_input,
+        output
+    )
+
+
+gr.Examples(
+    examples=[
+        [
+            "The Reserve Bank of India kept interest rates unchanged during its latest monetary policy meeting. Officials cited stable inflation and steady economic growth as key reasons behind the decision. Analysts expect the central bank to continue monitoring global financial conditions closely."
+        ],
+        [
+            "Scientists confirmed that humans can survive underwater for several hours after drinking a newly discovered herbal liquid. Researchers claim the formula changes lung function permanently and allows direct oxygen absorption from water."
+        ]
+    ],
+    inputs=news_input
+)
+
+
 
 demo.launch()
