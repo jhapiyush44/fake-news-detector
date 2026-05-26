@@ -12,7 +12,7 @@ from transformers import (
 
 model_path = "model"
 
-tokenizer = AutoTokenizer.from_pretrained(model_path)
+tokenizer = AutoTokenizer.from_pretrained(model_path,use_fast=False)
 
 model = AutoModelForSequenceClassification.from_pretrained(
     model_path
