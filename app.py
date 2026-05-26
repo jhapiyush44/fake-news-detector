@@ -12,7 +12,9 @@ from transformers import (
 
 model_path = "model"
 
-tokenizer = AutoTokenizer.from_pretrained(model_path,use_fast=False)
+tokenizer = AutoTokenizer.from_pretrained(
+    "roberta-base"
+)
 
 model = AutoModelForSequenceClassification.from_pretrained(
     model_path
